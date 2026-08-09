@@ -1,0 +1,46 @@
+name: Generate Gradle Wrapper (one-time)
+
+# Manual-only utility workflow. Run this once from the Actions tab to
+# generate a genuine gradle-wrapper.jar for Gradle 9.5.0 and commit it back
+# to the repository. This is intentionally separate from android-build.yml
+# and does not modify it.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-wrapper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up official Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.5.0"
+
+      - name: Generate genuine wrapper files
+        run: gradle wrapper --gradle-version 9.5.0 --distribution-type bin
+
+      - name: Show generated wrapper jar checksum (for your own verification)
+        run: sha256sum gradle/wrapper/gradle-wrapper.jar
+
+      - name: Commit only the generated wrapper files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add gradle/wrapper/gradle-wrapper.jar gradle/wrapper/gradle-wrapper.properties
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Add genuine Gradle 9.5.0 wrapper jar"
+          git push
