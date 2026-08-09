@@ -25,3 +25,9 @@ kotlin = "2.3.21"
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+
+# Compose Compiler Gradle plugin. Required since Kotlin 2.0 for any module
+# with Compose enabled (buildFeatures.compose = true). Its version always
+# matches the Kotlin version, so it is pinned to the same "kotlin" entry
+# above rather than a separate version.
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
