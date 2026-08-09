@@ -7,8 +7,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.drawscope.Fill
-import androidx.compose.ui.size
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.aura.weather.ui.weather.WeatherVisualState
@@ -64,7 +64,6 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSun(
     val cx = offsetX + w / 2f
     val cy = offsetY + h / 2f
     val r = minOf(w, h) * 0.26f
-    // Rays
     val rayLen = r * 0.7f
     for (i in 0 until 8) {
         val angle = Math.toRadians((i * 45).toDouble())
@@ -96,13 +95,11 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMoon(w: Float, 
     val cy = h / 2f
     val r = minOf(w, h) * 0.32f
     drawCircle(color = color, radius = r, center = Offset(cx, cy))
-    // Crescent bite
     drawCircle(
         color = Color(0xFF0C0E1C),
         radius = r * 0.85f,
         center = Offset(cx + r * 0.55f, cy - r * 0.25f)
     )
-    // Small stars
     drawCircle(color = color.copy(alpha = 0.8f), radius = r * 0.09f, center = Offset(cx - r * 1.4f, cy - r * 0.9f))
     drawCircle(color = color.copy(alpha = 0.6f), radius = r * 0.06f, center = Offset(cx - r * 0.9f, cy + r * 1.1f))
 }
