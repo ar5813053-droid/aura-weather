@@ -1,0 +1,27 @@
+# Aura Weather - centralized dependency/version catalog.
+#
+# This file is intentionally minimal for now: the repository only contains
+# build tooling/infrastructure, no application source code yet. Add library
+# dependencies here (not hard-coded in module build files) once the ":app"
+# module and its feature code are introduced.
+
+[versions]
+# Android Gradle Plugin
+agp = "9.3.1"
+
+# Kotlin. AGP 9.x compiles Kotlin sources using its own built-in Kotlin
+# support (no separate "org.jetbrains.kotlin.android" plugin is applied -
+# see the root build.gradle.kts and README for details). This entry pins the
+# Kotlin *language/API version* used for compilerOptions and keeps a single
+# source of truth for the Kotlin standard library version that future
+# modules should align with.
+kotlin = "2.3.21"
+
+[libraries]
+# Reserved for future use. Add Kotlin stdlib / AndroidX / other library
+# coordinates here once application source code is introduced, e.g.:
+# kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlin" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
