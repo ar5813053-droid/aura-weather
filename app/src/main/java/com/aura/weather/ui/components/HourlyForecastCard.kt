@@ -13,9 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -121,6 +118,13 @@ private fun HourlyTrendLine(values: List<Int>, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Shared "SECTION TITLE ... View All >" header used by both the hourly
+ * and 10-day cards. The trailing chevron is drawn locally via
+ * ChevronRightGlyph (GlyphIcons.kt) rather than
+ * androidx.compose.material.icons.filled.ChevronRight, which only exists
+ * in the material-icons-extended artifact -- not a dependency here.
+ */
 @Composable
 fun SectionHeader(title: String, onViewAll: () -> Unit = {}) {
     Row(
@@ -134,10 +138,9 @@ fun SectionHeader(title: String, onViewAll: () -> Unit = {}) {
             modifier = Modifier.clickable(onClick = onViewAll)
         ) {
             Text(text = "View All", color = AuraColors.TextSecondary, style = AuraType.Subtext)
-            Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = null,
+            ChevronRightGlyph(
                 tint = AuraColors.TextSecondary,
+                size = 18.dp,
                 modifier = Modifier.padding(start = 2.dp)
             )
         }
