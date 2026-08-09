@@ -1,0 +1,73 @@
+name: Android Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+
+# Cancel superseded runs on the same ref to save CI time.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Validate / Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Check whether the :app module exists yet
+        id: check_app
+        run: |
+          if [ -d "app" ] && [ -f "app/build.gradle.kts" ]; then
+            echo "app_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # While the repository only contains tooling/infrastructure and no
+      # ":app" module, there is no Android application to assemble. Instead
+      # of skipping silently (which could hide a broken Gradle setup) or
+      # trying to build a module that does not exist (which would always
+      # fail), this validates that the Gradle build itself configures
+      # correctly.
+      - name: Validate Gradle configuration (no :app module yet)
+        if: steps.check_app.outputs.app_exists == 'false'
+        run: |
+          echo "No :app module found yet - validating Gradle configuration only."
+          ./gradlew help --stacktrace
+
+      - name: Run Gradle checks
+        if: steps.check_app.outputs.app_exists == 'true'
+        run: ./gradlew check --stacktrace
+
+      - name: Assemble debug APK
+        if: steps.check_app.outputs.app_exists == 'true'
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        if: steps.check_app.outputs.app_exists == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: aura-weather-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          
