@@ -2,6 +2,8 @@ package com.aura.weather.ui.components
 
 import android.graphics.RuntimeShader
 import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -21,11 +23,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.aura.weather.ui.weather.WeatherVisualState
 import com.aura.weather.ui.weather.orbPalette
 import kotlin.math.PI
@@ -66,6 +69,44 @@ private const val LIQUID_SHADER = """
         return half4(base.rgb, 1.0);
     }
 """
+
+/**
+ * True only on API 33+ where [RuntimeShader] exists. Annotated with
+ * [ChecksSdkIntAtLeast] so lint's NewApi checker recognizes `if (isRuntimeShaderSupported())`
+ * as a valid version guard for the calls inside, the same way it recognizes an inline
+ * `Build.VERSION.SDK_INT >=` check.
+ */
+@ChecksSdkIntAtLeast(api = Build.VERSION_CODES.TIRAMISU)
+private fun isRuntimeShaderSupported(): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+/** Builds the AGSL liquid shader. Only ever called after [isRuntimeShaderSupported] is true. */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private fun createLiquidShader(): RuntimeShader = RuntimeShader(LIQUID_SHADER)
+
+/**
+ * Pushes this frame's uniforms into [shader] and paints [blobPath] with it. Only ever
+ * called after [isRuntimeShaderSupported] is true.
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private fun DrawScope.drawLiquidShaderOrb(
+    shader: RuntimeShader,
+    blobPath: Path,
+    time: Float,
+    turbulence: Float,
+    colors: List<Color>
+) {
+    shader.setFloatUniform("uResolution", size.width, size.height)
+    shader.setFloatUniform("uTime", time)
+    shader.setFloatUniform("uTurbulence", turbulence)
+    val c1 = colors.getOrElse(0) { Color.White }
+    val c2 = colors.getOrElse(1) { Color.Gray }
+    val c3 = colors.getOrElse(2) { Color.Black }
+    shader.setFloatUniform("uColorA", c1.red, c1.green, c1.blue, 1f)
+    shader.setFloatUniform("uColorB", c2.red, c2.green, c2.blue, 1f)
+    shader.setFloatUniform("uColorC", c3.red, c3.green, c3.blue, 1f)
+    drawPath(path = blobPath, brush = ShaderBrush(shader))
+}
 
 /**
  * The large hero weather visualization. Fills a rounded, continuously
@@ -121,23 +162,20 @@ fun WeatherOrb(
     val effectiveTime = if (isActive) rawTime * 40f else 0f
     val effectivePhase = if (isActive) rawPhase else 0f
 
-    val useShader = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-    val shader = remember(useShader) { if (useShader) RuntimeShader(LIQUID_SHADER) else null }
+    val useShader = isRuntimeShaderSupported()
+    val shader = remember(useShader) { if (useShader) createLiquidShader() else null }
 
     Canvas(modifier = modifier) {
         val blobPath = organicBlobPath(size.width, size.height, effectivePhase, palette.turbulence)
 
-        if (shader != null) {
-            shader.setFloatUniform("uResolution", size.width, size.height)
-            shader.setFloatUniform("uTime", effectiveTime)
-            shader.setFloatUniform("uTurbulence", palette.turbulence)
-            val c1 = palette.colors.getOrElse(0) { Color.White }
-            val c2 = palette.colors.getOrElse(1) { Color.Gray }
-            val c3 = palette.colors.getOrElse(2) { Color.Black }
-            shader.setFloatUniform("uColorA", c1.red, c1.green, c1.blue, 1f)
-            shader.setFloatUniform("uColorB", c2.red, c2.green, c2.blue, 1f)
-            shader.setFloatUniform("uColorC", c3.red, c3.green, c3.blue, 1f)
-            drawPath(path = blobPath, brush = ShaderBrush(shader))
+        if (useShader && shader != null) {
+            drawLiquidShaderOrb(
+                shader = shader,
+                blobPath = blobPath,
+                time = effectiveTime,
+                turbulence = palette.turbulence,
+                colors = palette.colors
+            )
         } else {
             val angle = effectivePhase
             val cx = size.width / 2f + cos(angle) * size.width * 0.08f
