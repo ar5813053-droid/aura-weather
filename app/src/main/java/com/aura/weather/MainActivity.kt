@@ -61,6 +61,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.aura.weather.handtracking.DetectedHand
 import com.aura.weather.handtracking.HandTracker
+import com.aura.weather.input.AccessibilityInputController
+import com.aura.weather.input.InputController
+import com.aura.weather.input.SteeringInputState
 import com.aura.weather.steering.HandPoint
 import com.aura.weather.steering.SteeringCalculator
 import com.aura.weather.steering.SteeringOutput
@@ -141,6 +144,12 @@ private fun HandDriveScreen() {
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val steeringCalculator = remember { SteeringCalculator() }
     val steeringSmoother = remember { SteeringSmoother() }
+    // Input layer: maps smoothed steering to optional Accessibility gestures.
+    // Requires the user to enable HandDriveAccessibilityService in system settings.
+    // If the service is not connected, updateSteering fails soft (no crash).
+    val inputController: InputController = remember {
+        AccessibilityInputController(context.applicationContext)
+    }
 
     val handTracker = remember {
         HandTracker(
@@ -158,7 +167,18 @@ private fun HandDriveScreen() {
                 val left = sortedByX.getOrNull(0)?.let { HandPoint(it.wrist.x, it.wrist.y) }
                 val right = sortedByX.getOrNull(1)?.let { HandPoint(it.wrist.x, it.wrist.y) }
 
-                steeringOutput = steeringSmoother.smooth(steeringCalculator.calculate(left, right))
+                // Existing two-hand path — unchanged algorithm.
+                val smoothed = steeringSmoother.smooth(steeringCalculator.calculate(left, right))
+                steeringOutput = smoothed
+
+                // Route smoothed steering into AccessibilityInputController (gestures if service enabled).
+                inputController.updateSteering(
+                    SteeringInputState.from(
+                        output = smoothed,
+                        handsDetected = result.hands.size,
+                        isTracking = true
+                    )
+                )
             },
             onError = { message -> errorMessage = message }
         )
@@ -225,6 +245,7 @@ private fun HandDriveScreen() {
         handsDetected = 0
         steeringSmoother.reset()
         steeringOutput = SteeringOutput.CENTER
+        inputController.stop()
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -232,7 +253,9 @@ private fun HandDriveScreen() {
     ) { granted ->
         hasCameraPermission = granted
         if (granted) {
-            isTracking = bindCamera()
+            val started = bindCamera()
+            isTracking = started
+            if (started) inputController.start()
         }
     }
 
@@ -241,7 +264,9 @@ private fun HandDriveScreen() {
             permissionLauncher.launch(Manifest.permission.CAMERA)
             return
         }
-        isTracking = bindCamera()
+        val started = bindCamera()
+        isTracking = started
+        if (started) inputController.start()
     }
 
     // Load the MediaPipe model off the UI thread once, on first composition.
@@ -259,6 +284,7 @@ private fun HandDriveScreen() {
             cameraProvider?.unbindAll()
             handTracker.close()
             cameraExecutor.shutdown()
+            inputController.stop()
         }
     }
 
@@ -507,100 +533,4 @@ private fun VirtualWheel(angleDegrees: Float, modifier: Modifier = Modifier) {
             val start = Offset(
                 center.x + (inner * cos(rad)).toFloat(),
                 center.y + (inner * sin(rad)).toFloat()
-            )
-            val end = Offset(
-                center.x + (radius * cos(rad)).toFloat(),
-                center.y + (radius * sin(rad)).toFloat()
-            )
-            drawLine(
-                color = if (tickDeg == 0) HudCyan else HudTextSecondary,
-                start = start,
-                end = end,
-                strokeWidth = if (tickDeg == 0) 4f else 2f
-            )
-            tickDeg += 15
-        }
-
-        rotate(degrees = angleDegrees, pivot = center) {
-            drawLine(
-                color = HudAmber,
-                start = center,
-                end = Offset(center.x, center.y - radius + 6f),
-                strokeWidth = 5f,
-                cap = StrokeCap.Round
-            )
-        }
-
-        drawCircle(color = HudAmber, radius = 8f, center = center)
-        drawCircle(color = HudBackground, radius = 4f, center = center)
-    }
-}
-
-@Composable
-private fun ReadoutText(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.End) {
-        Text(text = label, color = HudTextSecondary, fontSize = 11.sp, letterSpacing = 2.sp)
-        Text(
-            text = value,
-            color = HudAmber,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 26.sp
-        )
-    }
-}
-
-@Composable
-private fun SteeringMeterBar(percent: Float, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.height(10.dp)) {
-        val trackY = size.height / 2f
-        drawLine(
-            color = HudPanelBorder,
-            start = Offset(0f, trackY),
-            end = Offset(size.width, trackY),
-            strokeWidth = 4f,
-            cap = StrokeCap.Round
-        )
-        drawLine(
-            color = HudTextSecondary,
-            start = Offset(size.width / 2f, 0f),
-            end = Offset(size.width / 2f, size.height),
-            strokeWidth = 2f
-        )
-        val clamped = percent.coerceIn(-100f, 100f)
-        val x = size.width / 2f + (clamped / 100f) * (size.width / 2f)
-        drawCircle(color = HudAmber, radius = size.height / 2f, center = Offset(x, trackY))
-    }
-}
-
-@Composable
-private fun TrackingButton(
-    isTracking: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier.height(52.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isTracking) HudDanger else HudCyan,
-            contentColor = HudBackground,
-            disabledContainerColor = HudPanelBorder,
-            disabledContentColor = HudTextSecondary
-        )
-    ) {
-        Text(
-            text = when {
-                !enabled -> "LOADING MODEL…"
-                isTracking -> "STOP TRACKING"
-                else -> "START TRACKING"
-            },
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        )
-    }
-}
+     
