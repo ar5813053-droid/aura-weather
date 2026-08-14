@@ -544,7 +544,7 @@ private fun ReadoutText(label: String, value: String) {
             text = value,
             color = HudAmber,
             fontFamily = FontFamily.Monospace,
-            fontWeight.Bold,
+            fontWeight = FontWeight.Bold,
             fontSize = 26.sp
         )
     }

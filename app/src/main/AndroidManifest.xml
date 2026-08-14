@@ -1,6 +1,20 @@
 1<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Required for CameraX front-camera capture used by HandDrive's
+         real-time hand tracking (Phase 1). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- The app is unusable without a camera, but don't hard-require a
+         front camera specifically so it still installs on devices that
+         only expose a rear camera (CameraSelector.DEFAULT_FRONT_CAMERA
+         will simply fail to bind at runtime on those devices, and
+         HandDrive already surfaces that as an error banner instead of
+         crashing). -->
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
         android:allowBackup="true"
         android:label="Aura Weather"

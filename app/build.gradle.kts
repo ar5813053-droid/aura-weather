@@ -41,6 +41,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
+    // MainActivity uses Dispatchers/withContext directly (to load the
+    // MediaPipe model off the UI thread) - declare this explicitly rather
+    // than relying on it being pulled in transitively by lifecycle-ktx.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

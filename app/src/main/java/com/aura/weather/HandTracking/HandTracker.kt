@@ -3,6 +3,8 @@ package com.aura.weather.handtracking
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.camera.core.ImageProxy
 import com.google.mediapipe.framework.image.BitmapImageBuilder
@@ -42,6 +44,12 @@ class HandTracker(
     companion object {
         private const val MODEL_ASSET_PATH = "hand_landmarker.task"
     }
+
+    // MediaPipe's LIVE_STREAM result/error listeners fire on an internal
+    // MediaPipe worker thread, not the caller's thread. Both callbacks feed
+    // straight into Compose state in MainActivity, so hop back to the main
+    // thread before invoking them.
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var handLandmarker: HandLandmarker? = null
@@ -138,18 +146,18 @@ class HandTracker(
                 }
             )
         }
-        onResult(
-            HandTrackingResult(
-                hands = hands,
-                imageWidth = input.width,
-                imageHeight = input.height,
-                inferenceTimeMs = SystemClock.uptimeMillis() - result.timestampMs()
-            )
+        val trackingResult = HandTrackingResult(
+            hands = hands,
+            imageWidth = input.width,
+            imageHeight = input.height,
+            inferenceTimeMs = SystemClock.uptimeMillis() - result.timestampMs()
         )
+        mainHandler.post { onResult(trackingResult) }
     }
 
     private fun handleError(error: RuntimeException) {
-        onError(error.message ?: "Unknown hand tracking error")
+        val message = error.message ?: "Unknown hand tracking error"
+        mainHandler.post { onError(message) }
     }
 
     /**
