@@ -140,6 +140,9 @@ private fun HandDriveScreen() {
     var currentHands by remember { mutableStateOf<List<DetectedHand>>(emptyList()) }
     var steeringOutput by remember { mutableStateOf(SteeringOutput.CENTER) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    // Temporary diagnostic: AccessibilityService connection for gesture test mode.
+    var a11yConnected by remember { mutableStateOf(HandDriveAccessibilityService.isConnected()) }
+
 
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     val steeringCalculator = remember { SteeringCalculator() }
@@ -269,6 +272,14 @@ private fun HandDriveScreen() {
         if (started) inputController.start()
     }
 
+    // Poll AccessibilityService connection for the temporary gesture test panel.
+    LaunchedEffect(Unit) {
+        while (true) {
+            a11yConnected = HandDriveAccessibilityService.isConnected()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
     // Load the MediaPipe model off the UI thread once, on first composition.
     LaunchedEffect(Unit) {
         withContext(Dispatchers.Default) {
@@ -341,6 +352,10 @@ private fun HandDriveScreen() {
                 onClick = { if (isTracking) stopTracking() else startTracking() },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(Modifier.height(20.dp))
+            // TEMPORARY diagnostic — verify dispatchGesture() without MediaPipe.
+            AccessibilityGestureTestPanel(a11yConnected = a11yConnected)
         }
     }
 }
@@ -515,7 +530,7 @@ private fun StatusRow(handsDetected: Int, isTracking: Boolean, trackerReady: Boo
 
 @Composable
 private fun VirtualWheel(angleDegrees: Float, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.size(160.dp)) {
+    Canvas(modifier = modifie.size(160.dp)) {
         val radius = size.minDimension / 2f * 0.82f
         val center = Offset(size.width / 2f, size.height / 2f)
 
@@ -627,6 +642,93 @@ private fun TrackingButton(
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp
+        )
+    }
+}
+
+/**
+ * TEMPORARY diagnostic panel to verify that [HandDriveAccessibilityService]
+ * can inject real gestures via [AccessibilityService.dispatchGesture].
+ * Independent of MediaPipe / tracking. Remove once injection is confirmed.
+ */
+@Composable
+private fun AccessibilityGestureTestPanel(a11yConnected: Boolean) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, HudPanelBorder, RoundedCornerShape(12.dp))
+            .background(HudPanel, RoundedCornerShape(12.dp))
+            .padding(14.dp)
+    ) {
+        Text(
+            text = "A11Y GESTURE TEST (TEMP)",
+            color = HudCyan,
+            fontSize = 11.sp,
+            letterSpacing = 2.sp,
+            fontFamily = FontFamily.Monospace
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = if (a11yConnected) "STATUS · CONNECTED" else "STATUS · NOT CONNECTED",
+            color = if (a11yConnected) HudCyan else HudDanger,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(
+                onClick = { HandDriveAccessibilityService.testLeftSwipe() },
+                enabled = a11yConnected,
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = HudAmber,
+                    contentColor = HudBackground,
+                    disabledContainerColor = HudPanelBorder,
+                    disabledContentColor = HudTextSecondary
+                )
+            ) {
+                Text("LEFT", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+            Button(
+                onClick = { HandDriveAccessibilityService.testRightSwipe() },
+                enabled = a11yConnected,
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = HudAmber,
+                    contentColor = HudBackground,
+                    disabledContainerColor = HudPanelBorder,
+                    disabledContentColor = HudTextSecondary
+                )
+            ) {
+                Text("RIGHT", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+            Button(
+                onClick = { HandDriveAccessibilityService.testCenterTap() },
+                enabled = a11yConnected,
+                modifier = Modifier.weight(1f).height(44.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = HudCyan,
+                    contentColor = HudBackground,
+                    disabledContainerColor = HudPanelBorder,
+                    disabledContentColor = HudTextSecondary
+                )
+            ) {
+                Text("TAP", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Works with tracking OFF. Filter logcat: HandDriveInput",
+            color = HudTextSecondary,
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace
         )
     }
 }
