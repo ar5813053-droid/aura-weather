@@ -40,6 +40,16 @@ class HandDriveAccessibilityService : AccessibilityService() {
         fun testCenterTap(): Boolean =
             instance?.dispatchTestCenterTap() ?: logNotConnected("TEST CENTER TAP")
 
+        /** Manual diagnostic: long horizontal swipe across the real display. */
+        fun testRealSwipe(): Boolean = performTestSwipe()
+
+        /**
+         * Public entry used by the MainActivity "TEST REAL SWIPE" button.
+         * Dispatches a real system gesture via [AccessibilityService.dispatchGesture].
+         */
+        fun performTestSwipe(): Boolean =
+            instance?.performTestSwipe() ?: logNotConnected("TEST REAL SWIPE")
+
         private fun logNotConnected(label: String): Boolean {
             Log.w(TAG, "$label rejected — HandDriveAccessibilityService NOT CONNECTED")
             return false
@@ -155,6 +165,32 @@ class HandDriveAccessibilityService : AccessibilityService() {
         )
     }
 
+    /**
+     * Manual "TEST REAL SWIPE": horizontal stroke on the **real system display**
+     * via [dispatchGesture] (not an in-app animation).
+     *
+     * startX ≈ 20% width, endX ≈ 80% width, y ≈ 50% height, duration 700 ms.
+     */
+    fun performTestSwipe(): Boolean {
+        val (w, h) = screenSize()
+        val startX = w * 0.20f
+        val endX = w * 0.80f
+        val y = h * 0.50f
+        Log.i(
+            TAG,
+            "TEST SWIPE REQUESTED start=($startX,$y) end=($endX,$y) duration=700ms screen=${w.toInt()}x${h.toInt()}"
+        )
+        return dispatchStroke(
+            startX = startX,
+            endX = endX,
+            startY = y,
+            endY = y,
+            durationMs = 700L,
+            force = true,
+            label = "TEST REAL SWIPE"
+        )
+    }
+
     // ------------------------------------------------------------------
     // Shared dispatch
     // ------------------------------------------------------------------
@@ -203,7 +239,7 @@ class HandDriveAccessibilityService : AccessibilityService() {
         val stroke = GestureDescription.StrokeDescription(
             path,
             /* startTime = */ 0L,
-            /* duration = */ durationMs.coerceIn(16L, 800L)
+            /* duration = */ durationMs.coerceIn(16L, 1000L)
         )
         val gesture = GestureDescription.Builder().addStroke(stroke).build()
 
@@ -214,19 +250,20 @@ class HandDriveAccessibilityService : AccessibilityService() {
                     override fun onCompleted(gestureDescription: GestureDescription?) {
                         gestureInFlight.set(false)
                         if (label != null) {
-                            Log.d(TAG, "$label completed")
+                            Log.i(TAG, "GESTURE COMPLETED ($label)")
                         }
                     }
 
                     override fun onCancelled(gestureDescription: GestureDescription?) {
                         gestureInFlight.set(false)
                         if (label != null) {
-                            Log.w(TAG, "$label cancelled by system")
+                            Log.w(TAG, "GESTURE CANCELLED ($label)")
                         }
                     }
                 },
                 /* handler = */ null
             )
+            Log.i(TAG, "dispatchGesture returned $accepted${if (label != null) " ($label)" else ""}")
             if (accepted) {
                 if (label != null) {
                     Log.i(TAG, "$label dispatched")
