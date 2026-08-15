@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aura Weather</string>
+    <string name="handdrive_accessibility_service_description">
+        HandDrive uses this accessibility service only to send optional steering
+        gestures to a game you choose to control. It does not read passwords or
+        other sensitive on-screen content. You can disable it anytime in
+        Settings → Accessibility.
+    </string>
+</resources>

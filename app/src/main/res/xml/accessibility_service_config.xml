@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimum AccessibilityService config for HandDrive gesture prototype.
+  canPerformGestures is required for AccessibilityService.dispatchGesture().
+  No other capabilities (retrieve window content, etc.) are requested.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/handdrive_accessibility_service_description"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:notificationTimeout="100"
+    android:canPerformGestures="true" />
