@@ -21,6 +21,11 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import com.aura.weather.MainActivity
 import com.aura.weather.handtracking.HandTracker
+import com.aura.weather.overlay.HandDriveCameraOverlayService
+import com.aura.weather.overlay.HandDriveFrameHub
+import android.graphics.Bitmap
+import android.graphics.Matrix
+import androidx.camera.core.ImageProxy
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -83,6 +88,16 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
             val i = Intent(context, HandDriveTrackingService::class.java).setAction(ACTION_DISABLE_STEERING)
             context.startService(i)
         }
+
+        fun showCameraBubble(context: Context) {
+            // Ensure tracking pipeline is up so frames are published.
+            start(context)
+            HandDriveCameraOverlayService.show(context)
+        }
+
+        fun hideCameraBubble(context: Context) {
+            HandDriveCameraOverlayService.hide(context)
+        }
     }
 
     private val lifecycleRegistry = LifecycleRegistry(this)
@@ -94,6 +109,7 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
     private var handTracker: HandTracker? = null
     private val mapper = HandXSteeringMapper()
     private val steeringFlag = AtomicBoolean(false)
+    private var lastOverlayPublishMs: Long = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -170,11 +186,13 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
         isSteeringEnabled = enabled
         if (enabled) {
             mapper.reset()
+            HandDriveFrameHub.steeringEnabled = true
             Log.i(TAG, "STEERING_STARTED")
         } else {
             HandDriveAccessibilityService.instance?.endSteeringDrag()
             mapper.reset()
             lastSteering = 0f
+            HandDriveFrameHub.steeringEnabled = false
             Log.i(TAG, "STEERING_STOPPED")
         }
         // Refresh notification text
@@ -222,6 +240,8 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
                 .also { useCase ->
                     useCase.setAnalyzer(cameraExecutor) { imageProxy ->
                         val tracker = handTracker
+                        // Share a downscaled frame with the overlay bubble (same pipeline, no 2nd camera).
+                        maybePublishOverlayFrame(imageProxy)
                         if (tracker != null && tracker.isReady) {
                             tracker.detect(imageProxy, isFrontCamera = true)
                         } else {
@@ -253,6 +273,7 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
         val mapped = mapper.process(handX)
         lastHandX = mapped.handX
         lastSteering = mapped.steering
+        HandDriveFrameHub.publishHands(result)
 
         if (!steeringFlag.get()) return
 
@@ -286,6 +307,7 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
         }
         handTracker = null
         isServiceRunning = false
+        HandDriveFrameHub.clear()
         if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.CREATED) &&
             lifecycleRegistry.currentState != Lifecycle.State.DESTROYED
         ) {
