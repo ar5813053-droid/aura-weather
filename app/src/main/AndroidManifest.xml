@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -25,10 +28,6 @@
             </intent-filter>
         </activity>
 
-        <!--
-          HandDrive gesture prototype. User must enable this service in
-          Settings → Accessibility. It only requests canPerformGestures.
-        -->
         <service
             android:name=".input.HandDriveAccessibilityService"
             android:exported="true"
@@ -41,6 +40,15 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+
+        <!--
+          Owns CameraX + MediaPipe while MainActivity is minimized so START STEERING
+          keeps feeding HandDriveAccessibilityService.dispatchGesture system-wide.
+        -->
+        <service
+            android:name=".input.HandDriveTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
 
     </application>
 
