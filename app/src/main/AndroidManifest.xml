@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -41,14 +42,14 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!--
-          Owns CameraX + MediaPipe while MainActivity is minimized so START STEERING
-          keeps feeding HandDriveAccessibilityService.dispatchGesture system-wide.
-        -->
         <service
             android:name=".input.HandDriveTrackingService"
             android:exported="false"
             android:foregroundServiceType="camera" />
+
+        <service
+            android:name=".overlay.HandDriveCameraOverlayService"
+            android:exported="false" />
 
     </application>
 
