@@ -294,6 +294,61 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
         Log.d(TAG, "DISPATCH_GESTURE=true")
     }
 
+
+    /**
+     * Publishes a downscaled, front-camera-mirrored preview bitmap to
+     * [HandDriveFrameHub] for [HandDriveCameraOverlayService].
+     *
+     * Uses the same [ImageProxy] already delivered by this service's CameraX
+     * analysis use-case — does **not** open a second camera.
+     * Throttled (~12 fps) and skipped when the bubble is not visible.
+     */
+    private fun maybePublishOverlayFrame(imageProxy: ImageProxy) {
+        val now = System.currentTimeMillis()
+        if (now - lastOverlayPublishMs < 80L) return
+        if (!HandDriveCameraOverlayService.isShowing) return
+        lastOverlayPublishMs = now
+        try {
+            val buffer = imageProxy.planes[0].buffer.duplicate()
+            buffer.rewind()
+            val full = Bitmap.createBitmap(
+                imageProxy.width,
+                imageProxy.height,
+                Bitmap.Config.ARGB_8888
+            )
+            full.copyPixelsFromBuffer(buffer)
+            val rotation = imageProxy.imageInfo.rotationDegrees.toFloat()
+            val matrix = Matrix().apply {
+                postRotate(rotation)
+                // Match HandTracker front-camera mirror so landmarks align with preview.
+                postScale(-1f, 1f, full.width / 2f, full.height / 2f)
+            }
+            val rotated = Bitmap.createBitmap(
+                full, 0, 0, full.width, full.height, matrix, true
+            )
+            if (rotated !== full && !full.isRecycled) {
+                full.recycle()
+            }
+            val maxSide = 320
+            val longest = maxOf(rotated.width, rotated.height).coerceAtLeast(1)
+            val scale = maxSide.toFloat() / longest.toFloat()
+            val preview = if (scale < 1f) {
+                val w = (rotated.width * scale).toInt().coerceAtLeast(1)
+                val h = (rotated.height * scale).toInt().coerceAtLeast(1)
+                val small = Bitmap.createScaledBitmap(rotated, w, h, true)
+                if (small !== rotated && !rotated.isRecycled) {
+                    rotated.recycle()
+                }
+                small
+            } else {
+                rotated
+            }
+            HandDriveFrameHub.publishFrame(preview)
+        } catch (t: Throwable) {
+            Log.w(TAG, "overlay frame publish failed: ${t.message}")
+        }
+    }
+
     private fun stopEverything() {
         setSteeringEnabled(false)
         try {
