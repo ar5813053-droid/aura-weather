@@ -128,6 +128,7 @@ class HandDriveAccessibilityService : AccessibilityService() {
      */
     fun updateSteeringDrag(steeringPercent: Float) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        Log.d(TAG, "UPDATE_STEERING_DRAG in a11y percent=$steeringPercent")
 
         val (w, h) = screenSize()
         val y = h * 0.55f
@@ -255,6 +256,7 @@ class HandDriveAccessibilityService : AccessibilityService() {
                 object : GestureResultCallback() {
                     override fun onCompleted(gestureDescription: GestureDescription?) {
                         gestureInFlight.set(false)
+                        Log.d(TAG, "DISPATCH_RESULT=completed")
                     }
 
                     override fun onCancelled(gestureDescription: GestureDescription?) {
@@ -262,10 +264,12 @@ class HandDriveAccessibilityService : AccessibilityService() {
                         if (!willContinue) {
                             continuingStroke = null
                         }
+                        Log.w(TAG, "DISPATCH_RESULT=cancelled")
                     }
                 },
                 null
             )
+            Log.i(TAG, "DISPATCH_GESTURE=$accepted DISPATCH_RESULT=submitted")
             if (!accepted) {
                 gestureInFlight.set(false)
             }
