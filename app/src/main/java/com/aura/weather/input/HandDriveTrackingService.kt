@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.IBinder
 import android.util.Log
 import androidx.camera.core.CameraSelector
@@ -110,6 +112,36 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
     private val mapper = HandXSteeringMapper()
     private val steeringFlag = AtomicBoolean(false)
     private var lastOverlayPublishMs: Long = 0L
+    private var lastFrameUptimeMs: Long = 0L
+    private var frameCount: Long = 0L
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val watchdogRunnable = object : Runnable {
+        override fun run() {
+            if (!isServiceRunning) return
+            val idle = System.currentTimeMillis() - lastFrameUptimeMs
+            Log.i(TAG, "SERVICE_RUNNING steering=$isSteeringEnabled idleFrameMs=$idle frames=$frameCount")
+            // If frames stopped while we should be tracking, re-bind camera.
+            if (lastFrameUptimeMs > 0L && idle > 2500L && cameraProvider != null) {
+                Log.w(TAG, "CAMERA_FRAME stalled — rebinding CameraX")
+                try {
+                    bindCamera(cameraProvider!!)
+                } catch (t: Throwable) {
+                    Log.e(TAG, "watchdog rebind failed: ${t.message}")
+                }
+            }
+            // Keep lifecycle RESUMED so CameraX does not unbind.
+            try {
+                if (lifecycleRegistry.currentState != Lifecycle.State.DESTROYED &&
+                    lifecycleRegistry.currentState < Lifecycle.State.RESUMED
+                ) {
+                    lifecycleRegistry.currentState = Lifecycle.State.RESUMED
+                    Log.w(TAG, "lifecycle restored to RESUMED")
+                }
+            } catch (_: Throwable) {
+            }
+            mainHandler.postDelayed(this, 2000L)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -171,6 +203,9 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
             startForeground(NOTIFICATION_ID, notification)
         }
         isServiceRunning = true
+        mainHandler.removeCallbacks(watchdogRunnable)
+        mainHandler.post(watchdogRunnable)
+        Log.i(TAG, "SERVICE_RUNNING=true")
         if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.CREATED)) {
             if (lifecycleRegistry.currentState < Lifecycle.State.STARTED) {
                 lifecycleRegistry.currentState = Lifecycle.State.STARTED
@@ -201,7 +236,16 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
     }
 
     private fun startCameraIfNeeded() {
-        if (handTracker != null && cameraProvider != null) return
+        // If we already own a bound pipeline, do nothing.
+        if (handTracker != null && cameraProvider != null && handTracker!!.isReady) {
+            // Re-bind in case another client called unbindAll() on the shared provider.
+            try {
+                bindCamera(cameraProvider!!)
+            } catch (t: Throwable) {
+                Log.w(TAG, "rebind after possible unbindAll: ${t.message}")
+            }
+            return
+        }
 
         handTracker = HandTracker(
             context = applicationContext,
@@ -240,6 +284,11 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
                 .also { useCase ->
                     useCase.setAnalyzer(cameraExecutor) { imageProxy ->
                         val tracker = handTracker
+                        lastFrameUptimeMs = System.currentTimeMillis()
+                        frameCount++
+                        if (frameCount % 30L == 0L) {
+                            Log.d(TAG, "CAMERA_FRAME #$frameCount")
+                        }
                         // Share a downscaled frame with the overlay bubble (same pipeline, no 2nd camera).
                         maybePublishOverlayFrame(imageProxy)
                         if (tracker != null && tracker.isReady) {
@@ -283,14 +332,19 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
             return
         }
 
-        Log.d(TAG, "HAND_X=${"%.3f".format(handX)} STEERING_VALUE=${"%.1f".format(mapped.steering)}")
+        Log.i(
+            TAG,
+            "HANDS_DETECTED=${result.hands.size} HAND_X=${"%.3f".format(handX)} STEERING_VALUE=${"%.1f".format(mapped.steering)}"
+        )
+        val a11yConnected = HandDriveAccessibilityService.isConnected()
+        Log.d(TAG, "ACCESSIBILITY_CONNECTED=$a11yConnected")
         val service = HandDriveAccessibilityService.instance
         if (service == null) {
-            Log.w(TAG, "DISPATCH_GESTURE=false (accessibility not connected)")
+            Log.w(TAG, "DISPATCH_GESTURE=false (accessibility instance null)")
             return
         }
+        Log.i(TAG, "UPDATE_STEERING_DRAG percent=${"%.1f".format(mapped.steering)}")
         service.updateSteeringDrag(mapped.steering)
-        // updateSteeringDrag logs/returns internally; mark intent
         Log.d(TAG, "DISPATCH_GESTURE=true")
     }
 
@@ -350,7 +404,12 @@ class HandDriveTrackingService : Service(), LifecycleOwner {
     }
 
     private fun stopEverything() {
+        mainHandler.removeCallbacks(watchdogRunnable)
         setSteeringEnabled(false)
+        try {
+            HandDriveCameraOverlayService.hide(applicationContext)
+        } catch (_: Throwable) {
+        }
         try {
             cameraProvider?.unbindAll()
         } catch (_: Throwable) {
